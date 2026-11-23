@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.mydecompilers"
+    android:versionCode="5"
+    android:versionName="1.4">
+
+    <uses-sdk
+        android:minSdkVersion="26"
+        android:targetSdkVersion="28" />
+
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+    <application
+        android:name=".MainApplication"
+        android:allowBackup="false"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:largeHeap="true"
+        android:theme="@style/AppThemeLight">
+
+        <provider
+            android:name=".utils.FileShareProvider"
+            android:authorities="com.mydecompilers.share"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <service
+            android:name=".services.DecompilerService"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.android.package-archive" />
+                <data android:mimeType="application/java-archive" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.android.package-archive" />
+                <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".ui.DecompilerActivity" android:label="Decompiler" />
+        <activity android:name=".ui.NavigatorActivity" android:label="Source explorer" />
+        <activity android:name=".ui.CodeViewerActivity" android:label="Code" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".ui.ImageViewerActivity" android:label="Image" />
+    </application>
+</manifest>
