@@ -8,24 +8,29 @@ package com.mydecompilers.ui;
 import android.app.ProgressDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+//import android.content.ColorStateList;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 
 import com.mydecompilers.Constants;
+import com.mydecompilers.R;
 import com.mydecompilers.data.PackageInfo;
 import com.mydecompilers.engines.DecompilerRegistry;
 import com.mydecompilers.managers.DecompilerTaskManager;
@@ -35,6 +40,7 @@ import com.mydecompilers.utils.UserPreferences;
 import com.mydecompilers.utils.ZipUtils;
 
 import java.io.File;
+import android.content.res.*;
 
 /** Configure, run, monitor and finish one decompilation. */
 public class DecompilerActivity extends BaseActivity implements DecompilerTaskManager.Listener {
@@ -42,13 +48,14 @@ public class DecompilerActivity extends BaseActivity implements DecompilerTaskMa
     private PackageInfo info;
     private UserPreferences prefs;
 
-    private Spinner engineSpinner;
+    private SelectField engineField;
     private TextView engineDesc;
-    private Button startButton, stopButton, openButton, zipButton, copyLogButton, againButton;
-    private ProgressBar progressBar;
-    private TextView statusText, memoryText, logText, stateText;
+    private View startButton, stopButton, openButton, zipButton, copyLogButton, againButton;
+    private ProgressBar progressBar, stateSpinner;
+    private ImageView stateIcon;
+    private TextView statusText, memoryText, logText, stateText, percentText;
     private ScrollView logScroll;
-    private LinearLayout configRow;
+    private View configRow, statusCard, logSection, idleHint, resultRow;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,131 +71,198 @@ public class DecompilerActivity extends BaseActivity implements DecompilerTaskMa
     }
 
     private void buildUi() {
+        boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(12), dp(12), dp(12), dp(8));
+        root.setBackgroundColor(p.bg);
+        root.setPadding(dp(UiStyle.GUTTER), dp(12), dp(UiStyle.GUTTER), dp(16));
 
-        // header
-        LinearLayout header = new LinearLayout(this);
+        // ---- app header card
+        LinearLayout header = UiStyle.card(this, p);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(14), dp(14), dp(14), dp(14));
         ImageView icon = new ImageView(this);
         header.addView(icon, new LinearLayout.LayoutParams(dp(52), dp(52)));
         IconLoader.load(this, info, icon);
         LinearLayout titleCol = new LinearLayout(this);
         titleCol.setOrientation(LinearLayout.VERTICAL);
-        titleCol.setPadding(dp(12), 0, 0, 0);
-        titleCol.addView(text(info.label, 18, true));
-        TextView pkg = text(info.name, 12, false);
+        titleCol.setPadding(dp(14), 0, 0, 0);
+        TextView name = text(info.label, 18, true);
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        titleCol.addView(name);
+        TextView pkg = caption(info.name, 12);
+        pkg.setSingleLine(true);
+        pkg.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         titleCol.addView(pkg);
-        titleCol.addView(text(info.version + "  \u2022  " + info.typeLabel() + (info.isSystemPackage ? "  \u2022  system app" : ""), 12, false));
+        LinearLayout chips = new LinearLayout(this);
+        chips.setOrientation(LinearLayout.HORIZONTAL);
+        chips.setGravity(Gravity.CENTER_VERTICAL);
+        chips.addView(UiStyle.chip(this, info.typeLabel(), p.accent, p.accentSoft));
+        if (info.isSystemPackage) {
+            chips.addView(UiStyle.chip(this, "System app", p.warning, p.warningSoft), UiStyle.lp(-2, -2, dp(6), 0, 0, 0));
+        }
+        if (info.version != null && info.version.length() > 0) {
+            TextView ver = caption(info.version, 12);
+            ver.setSingleLine(true);
+            ver.setEllipsize(TextUtils.TruncateAt.END);
+            chips.addView(ver, UiStyle.lp(-2, -2, dp(8), 0, 0, 0));
+        }
+        titleCol.addView(chips, UiStyle.lp(-2, -2, 0, dp(8), 0, 0));
         header.addView(titleCol, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         root.addView(header, matchWrap());
 
-        // engine selection
-        configRow = new LinearLayout(this);
-        configRow.setOrientation(LinearLayout.VERTICAL);
-        configRow.setPadding(0, dp(12), 0, 0);
-        configRow.addView(text("Decompiler engine", 14, true));
-        engineSpinner = new Spinner(this);
-        engineSpinner.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
-                DecompilerRegistry.getEngineNames()));
+        // ---- engine selection
+        LinearLayout config = UiStyle.card(this, p);
+        configRow = config;
+        config.addView(text("Decompiler engine", 14, true));
         int idx = prefs.getSelectedDecompilerIndex();
         if (idx < 0 || idx >= DecompilerRegistry.getEngineIds().length) idx = 0;
         if (info.type == PackageInfo.Type.JAR && "jadx".equals(DecompilerRegistry.getEngineIds()[idx])) idx = 1;
-        engineSpinner.setSelection(idx);
-        engineSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+        engineField = new SelectField(this, "Decompiler engine", DecompilerRegistry.getEngineNames(), idx);
+        config.addView(engineField, UiStyle.lp(-1, -2, 0, dp(10), 0, 0));
+        engineDesc = caption(DecompilerRegistry.getAllEngines().get(idx).getDescription(), 12);
+        engineDesc.setLineSpacing(dp(2), 1f);
+        config.addView(engineDesc, UiStyle.lp(-1, -2, 0, dp(10), 0, 0));
+        engineField.setListener(new SelectField.Listener() {
+            public void onChanged(int position) {
                 engineDesc.setText(DecompilerRegistry.getAllEngines().get(position).getDescription());
             }
-
-            public void onNothingSelected(android.widget.AdapterView<?> parent) { }
         });
-        configRow.addView(engineSpinner);
-        engineDesc = text(DecompilerRegistry.getAllEngines().get(idx).getDescription(), 12, false);
-        configRow.addView(engineDesc);
-        root.addView(configRow, matchWrap());
+        root.addView(config, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
 
-        // buttons
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        startButton = button("Start", new View.OnClickListener() {
+        // ---- main action (only one is visible at a time)
+        startButton = UiStyle.button(this, "Start decompiling", UiStyle.BTN_PRIMARY, R.drawable.ic_play);
+        startButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startTask();
             }
         });
-        stopButton = button("Stop", new View.OnClickListener() {
+        stopButton = UiStyle.button(this, "Stop", UiStyle.BTN_DANGER, R.drawable.ic_stop);
+        stopButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 DecompilerTaskManager.stop();
             }
         });
-        againButton = button("Decompile again", new View.OnClickListener() {
+        againButton = UiStyle.button(this, "Decompile again", UiStyle.BTN_TONAL, R.drawable.ic_refresh);
+        againButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 DecompilerTaskManager.clear();
                 render();
             }
         });
-        buttons.addView(startButton, weight(1f));
-        buttons.addView(stopButton, weight(1f));
-        buttons.addView(againButton, weight(1f));
-        root.addView(buttons, matchWrap());
+        root.addView(startButton, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
+        root.addView(stopButton, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
+        root.addView(againButton, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
 
-        // status
-        stateText = text("", 14, true);
-        root.addView(stateText, matchWrap());
+        // ---- status card
+        LinearLayout status = UiStyle.card(this, p);
+        statusCard = status;
+        status.setPadding(dp(14), dp(14), dp(14), dp(14));
+        LinearLayout stateRow = new LinearLayout(this);
+        stateRow.setOrientation(LinearLayout.HORIZONTAL);
+        stateRow.setGravity(Gravity.CENTER_VERTICAL);
+        stateIcon = new ImageView(this);
+        stateRow.addView(stateIcon, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        stateSpinner = new ProgressBar(this);
+        stateSpinner.setIndeterminate(true);
+        stateRow.addView(stateSpinner, new LinearLayout.LayoutParams(dp(22), dp(22)));
+        stateText = text("", 15, true);
+        stateRow.addView(stateText, UiStyle.lp(0, -2, dp(10), 0, 0, 0));
+        ((LinearLayout.LayoutParams) stateText.getLayoutParams()).weight = 1f;
+        percentText = UiStyle.text(this, "", 14, p.accent, true);
+        stateRow.addView(percentText);
+        status.addView(stateRow, matchWrap());
         progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
-        root.addView(progressBar, matchWrap());
-        statusText = text("", 12, false);
+        UiStyle.styleProgress(this, p, progressBar);
+        status.addView(progressBar, UiStyle.lp(-1, dp(8), 0, dp(12), 0, 0));
+        statusText = caption("", 12);
         statusText.setSingleLine(true);
-        root.addView(statusText, matchWrap());
-        memoryText = text("", 12, false);
-        root.addView(memoryText, matchWrap());
+        statusText.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+        status.addView(statusText, UiStyle.lp(-1, -2, 0, dp(10), 0, 0));
+        memoryText = caption("", 12);
+        status.addView(memoryText, matchWrap());
+        root.addView(status, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
 
-        // log
+        // ---- log
+        LinearLayout logBox = new LinearLayout(this);
+        logBox.setOrientation(LinearLayout.VERTICAL);
+        logSection = logBox;
+        logBox.addView(UiStyle.sectionLabel(this, p, "Log"), UiStyle.lp(-1, -2, dp(2), 0, 0, dp(8)));
         logScroll = new ScrollView(this);
+        logScroll.setBackground(UiStyle.outlined(this, p.code, p.outline, UiStyle.CARD_RADIUS));
+        logScroll.setClipToOutline(true);
+        logScroll.setNestedScrollingEnabled(true);
         logText = new TextView(this);
         logText.setTypeface(Typeface.MONOSPACE);
         logText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        logText.setTextColor(p.text);
+        logText.setLineSpacing(dp(1), 1f);
         logText.setTextIsSelectable(true);
-        logText.setPadding(dp(4), dp(4), dp(4), dp(4));
+        logText.setPadding(dp(12), dp(10), dp(12), dp(10));
         logScroll.addView(logText);
-        root.addView(logScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        logBox.addView(logScroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, landscape ? dp(220) : 0, landscape ? 0f : 1f));
 
-        // result buttons
-        LinearLayout result = new LinearLayout(this);
-        result.setOrientation(LinearLayout.HORIZONTAL);
-        openButton = button("Open sources", new View.OnClickListener() {
+        idleHint = UiStyle.emptyState(this, p, R.drawable.ic_play, "Ready to decompile",
+                "Choose an engine and tap Start. Progress and log will appear here.");
+        LinearLayout.LayoutParams fill = landscape
+                ? UiStyle.lp(-1, -2, 0, dp(12), 0, 0)
+                : UiStyle.lp(-1, 0, 0, dp(12), 0, 0);
+        LinearLayout.LayoutParams logFill = landscape
+                ? UiStyle.lp(-1, -2, 0, dp(16), 0, 0)
+                : UiStyle.lp(-1, 0, 0, dp(16), 0, 0);
+        if (!landscape) {
+            fill.weight = 1f;
+            logFill.weight = 1f;
+        }
+        root.addView(idleHint, fill);
+        root.addView(logBox, logFill);
+
+        // ---- result actions
+        openButton = UiStyle.button(this, "Open sources", UiStyle.BTN_PRIMARY, R.drawable.ic_folder_open);
+        openButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 openSources();
             }
         });
-        zipButton = button("Export ZIP", new View.OnClickListener() {
+        zipButton = UiStyle.button(this, "Export ZIP", UiStyle.BTN_TONAL, R.drawable.ic_archive);
+        zipButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 exportZip();
             }
         });
-        copyLogButton = button("Copy log", new View.OnClickListener() {
+        copyLogButton = UiStyle.button(this, "Copy log", UiStyle.BTN_OUTLINE, R.drawable.ic_copy);
+        copyLogButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
                 cm.setPrimaryClip(ClipData.newPlainText("log", DecompilerTaskManager.getLogText()));
                 toast("Log copied");
             }
         });
-        result.addView(openButton, weight(1f));
-        result.addView(zipButton, weight(1f));
-        result.addView(copyLogButton, weight(1f));
-        root.addView(result, matchWrap());
+        LinearLayout result = new LinearLayout(this);
+        result.setOrientation(LinearLayout.VERTICAL);
+        resultRow = result;
+        result.addView(openButton, matchWrap());
+        LinearLayout secondary = new LinearLayout(this);
+        secondary.setOrientation(LinearLayout.HORIZONTAL);
+        secondary.addView(zipButton, weight(1f));
+        LinearLayout.LayoutParams copyLp = weight(1f);
+        copyLp.leftMargin = dp(8);
+        secondary.addView(copyLogButton, copyLp);
+        result.addView(secondary, UiStyle.lp(-1, -2, 0, dp(8), 0, 0));
+        root.addView(result, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
 
-        setContentView(root);
-    }
-
-    private Button button(String label, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setOnClickListener(l);
-        return b;
+        if (landscape) {
+            ScrollView outer = new ScrollView(this);
+            outer.setFillViewport(true);
+            outer.setBackgroundColor(p.bg);
+            outer.addView(root, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            setContentView(outer);
+        } else {
+            setContentView(root);
+        }
     }
 
     @Override
@@ -209,7 +283,7 @@ public class DecompilerActivity extends BaseActivity implements DecompilerTaskMa
     }
 
     private void startTask() {
-        int pos = engineSpinner.getSelectedItemPosition();
+        int pos = engineField.getSelectedIndex();
         prefs.setSelectedDecompilerIndex(pos);
         String engine = DecompilerRegistry.getEngineIds()[pos];
         try {
@@ -238,50 +312,106 @@ public class DecompilerActivity extends BaseActivity implements DecompilerTaskMa
         boolean running = mine && s == DecompilerTaskManager.State.RUNNING;
         boolean finished = mine && (s == DecompilerTaskManager.State.COMPLETED
                 || s == DecompilerTaskManager.State.FAILED || s == DecompilerTaskManager.State.STOPPED);
+        boolean hasTask = mine && s != DecompilerTaskManager.State.IDLE;
+        boolean hasOutput = mine && s == DecompilerTaskManager.State.COMPLETED || finished && hasPartialOutput();
 
         setVisible(configRow, !running && !finished);
         setVisible(startButton, !running && !finished);
         startButton.setEnabled(!otherRunning);
         setVisible(stopButton, running);
         setVisible(againButton, finished);
-        setVisible(progressBar, mine && s != DecompilerTaskManager.State.IDLE);
-        setVisible(openButton, mine && s == DecompilerTaskManager.State.COMPLETED || finished && hasPartialOutput());
-        setVisible(zipButton, mine && s == DecompilerTaskManager.State.COMPLETED || finished && hasPartialOutput());
+        setVisible(statusCard, hasTask || otherRunning);
+        setVisible(progressBar, hasTask);
+        setVisible(percentText, hasTask);
+        setVisible(logSection, hasTask);
+        setVisible(idleHint, !hasTask);
+        setVisible(resultRow, mine);
+        setVisible(openButton, hasOutput);
+        setVisible(zipButton, hasOutput);
         setVisible(copyLogButton, mine);
 
+        // state title + icon / spinner
+        int tint = p.accent;
+        int iconRes = 0;
         if (otherRunning) {
             PackageInfo other = DecompilerTaskManager.getActivePackage();
             stateText.setText("Another decompilation is running" + (other != null ? " (" + other.label + ")" : ""));
+            iconRes = R.drawable.ic_info;
+            tint = p.warning;
         } else if (!mine) {
             stateText.setText("Ready");
         } else if (s == DecompilerTaskManager.State.RUNNING) {
             stateText.setText("Decompiling with " + DecompilerTaskManager.getActiveEngine() + "...");
         } else if (s == DecompilerTaskManager.State.COMPLETED) {
             stateText.setText("Decompilation finished");
+            iconRes = R.drawable.ic_check_circle;
+            tint = p.success;
         } else if (s == DecompilerTaskManager.State.STOPPED) {
             stateText.setText("Stopped - partial output was kept");
+            iconRes = R.drawable.ic_info;
+            tint = p.warning;
         } else if (s == DecompilerTaskManager.State.FAILED) {
             stateText.setText("Decompilation failed");
+            iconRes = R.drawable.ic_error;
+            tint = p.danger;
         } else {
             stateText.setText("Ready");
         }
+        if (iconRes != 0) stateIcon.setImageDrawable(UiStyle.tinted(this, iconRes, tint));
+        setVisible(stateIcon, iconRes != 0);
+        setVisible(stateSpinner, iconRes == 0 && running);
+        percentText.setTextColor(tint);
+        progressBar.setProgressTintList(ColorStateList.valueOf(running || !hasTask ? p.primary : tint));
 
         if (mine) {
-            progressBar.setProgress(DecompilerTaskManager.getProgress());
+            int progress = DecompilerTaskManager.getProgress();
+            progressBar.setProgress(progress);
+            percentText.setText(progress + "%");
             statusText.setText(DecompilerTaskManager.getStatusText());
-            memoryText.setText(DecompilerTaskManager.getMemoryText().length() > 0
-                    ? "Memory: " + DecompilerTaskManager.getMemoryText() : "");
-            logText.setText(DecompilerTaskManager.getLogText());
+            setVisible(statusText, statusText.length() > 0);
+            String mem = DecompilerTaskManager.getMemoryText();
+            memoryText.setText(mem.length() > 0 ? "Memory: " + mem : "");
+            setVisible(memoryText, mem.length() > 0);
+            logText.setText(colorize(DecompilerTaskManager.getLogText()));
             logScroll.post(new Runnable() {
                 public void run() {
                     logScroll.fullScroll(View.FOCUS_DOWN);
                 }
             });
         } else {
-            statusText.setText("");
-            memoryText.setText("");
+            setVisible(statusText, false);
+            setVisible(memoryText, false);
             logText.setText("");
         }
+    }
+
+    /** Tints [ERROR], [WARN] and [STEP] lines so problems stand out; skipped for very large logs. */
+    private CharSequence colorize(String log) {
+        if (log == null) return "";
+        int len = log.length();
+        if (len > 120000) return log;
+        SpannableStringBuilder sb = new SpannableStringBuilder(log);
+        int start = 0;
+        while (start < len) {
+            int end = log.indexOf('\n', start);
+            if (end < 0) end = len;
+            int color = 0;
+            boolean bold = false;
+            if (log.startsWith("[ERROR]", start)) {
+                color = p.danger;
+            } else if (log.startsWith("[WARN]", start)) {
+                color = p.warning;
+            } else if (log.startsWith("[STEP", start)) {
+                color = p.accent;
+                bold = true;
+            }
+            if (color != 0 && end > start) {
+                sb.setSpan(new ForegroundColorSpan(color), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                if (bold) sb.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            start = end + 1;
+        }
+        return sb;
     }
 
     private boolean hasPartialOutput() {
