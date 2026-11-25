@@ -17,10 +17,10 @@ import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.LinearLayout;
 import android.widget.ListView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.mydecompilers.Constants;
+import com.mydecompilers.R;
 import com.mydecompilers.data.SourceInfo;
 import com.mydecompilers.utils.FileUtils;
 import com.mydecompilers.utils.ShareUtils;
@@ -39,25 +39,35 @@ import java.util.Set;
 public class HistoryScreen {
 
     private final MainActivity activity;
+    private final UiStyle.Palette p;
     private final LinearLayout root;
     private final ListView list;
-    private final TextView empty;
+    private final View empty;
     private final HistoryAdapter adapter;
 
     public HistoryScreen(MainActivity a) {
         this.activity = a;
+        p = UiStyle.palette(a);
         root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(p.bg);
+        root.setPadding(dp(UiStyle.GUTTER), dp(16), dp(UiStyle.GUTTER), 0);
+        root.addView(UiStyle.header(a, p, "History", "Previously decompiled projects"));
 
-        empty = new TextView(a);
-        empty.setText("Nothing decompiled yet");
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(0, dp(32), 0, 0);
+        empty = UiStyle.emptyState(a, p, R.drawable.ic_history, "Nothing decompiled yet",
+                "Projects you decompile will show up here.");
         root.addView(empty, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         list = new ListView(a);
         adapter = new HistoryAdapter();
         list.setAdapter(adapter);
+        list.setDivider(null);
+        list.setDividerHeight(dp(8));
+        list.setSelector(android.R.color.transparent);
+        list.setCacheColorHint(android.graphics.Color.TRANSPARENT);
+        list.setClipToPadding(false);
+        list.setPadding(0, 0, 0, dp(16));
+        list.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -188,34 +198,16 @@ public class HistoryScreen {
         public long getItemId(int i) { return i; }
 
         public View getView(int position, View convertView, ViewGroup parent) {
-            LinearLayout row;
-            TextView a, b, c;
+            ListRow row;
             if (convertView == null) {
-                row = new LinearLayout(activity);
-                row.setOrientation(LinearLayout.VERTICAL);
-                row.setPadding(dp(16), dp(10), dp(16), dp(10));
-                a = new TextView(activity);
-                a.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-                a.setTypeface(a.getTypeface(), android.graphics.Typeface.BOLD);
-                b = new TextView(activity);
-                b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-                c = new TextView(activity);
-                c.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-                row.addView(a);
-                row.addView(b);
-                row.addView(c);
-                row.setTag(new TextView[] { a, b, c });
+                row = new ListRow(activity);
+                row.setTile(R.drawable.ic_folder, p.accent, p.accentSoft);
             } else {
-                row = (LinearLayout) convertView;
-                TextView[] tv = (TextView[]) row.getTag();
-                a = tv[0];
-                b = tv[1];
-                c = tv[2];
+                row = (ListRow) convertView;
             }
             SourceInfo si = items.get(position);
-            a.setText(si.packageLabel);
-            b.setText(si.packageName);
-            c.setText(si.getDisplayTag() + "  \u2022  " + FileUtils.formatSize(si.sourceSize));
+            row.bind(si.packageLabel, si.packageName, null,
+                    si.getDisplayTag() + "  \u2022  " + FileUtils.formatSize(si.sourceSize));
             return row;
         }
     }
