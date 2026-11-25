@@ -17,6 +17,7 @@ import android.view.ScaleGestureDetector;
 import android.widget.ImageView;
 
 import com.mydecompilers.Constants;
+import com.mydecompilers.R;
 import com.mydecompilers.utils.ShareUtils;
 
 import java.io.File;
@@ -52,12 +53,15 @@ public class ImageViewerActivity extends BaseActivity {
         }
         ZoomImageView view = new ZoomImageView(this);
         view.setImageBitmap(bmp);
+        view.setBackgroundColor(p.dark ? 0xff0b0f14 : 0xffe9edf4);
         setContentView(view);
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, "Share");
+        menu.add(0, 1, 0, "Share")
+                .setIcon(UiStyle.tinted(this, R.drawable.ic_share, 0xffffffff))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         return true;
     }
 
