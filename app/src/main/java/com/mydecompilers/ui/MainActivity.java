@@ -13,12 +13,14 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.mydecompilers.Constants;
+import com.mydecompilers.R;
 import com.mydecompilers.data.PackageInfo;
 
 /** Hosts the three top-level screens: Apps, History and Settings. */
@@ -32,8 +34,19 @@ public class MainActivity extends BaseActivity {
     private HistoryScreen history;
     private SettingsScreen settings;
     private FrameLayout content;
-    private Button tabApps, tabHistory, tabSettings;
     private int currentTab = 0;
+
+    // bottom navigation
+    private final int[] navIcons = { R.drawable.ic_apps, R.drawable.ic_history, R.drawable.ic_settings };
+    private final String[] navLabels = { "Apps", "History", "Settings" };
+    private final FrameLayout[] navPills = new FrameLayout[3];
+    private final ImageView[] navImages = new ImageView[3];
+    private final TextView[] navTexts = new TextView[3];
+
+    @Override
+    protected boolean showUp() {
+        return false;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,21 +68,25 @@ public class MainActivity extends BaseActivity {
     private void showCrashReport(final String report) {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(12), dp(12), dp(12), dp(12));
-        col.addView(text("The app crashed last time", 18, true), matchWrap());
-        col.addView(text("Copy this report and send it so the problem can be fixed.", 13, false), matchWrap());
-        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        col.setBackgroundColor(p.bg);
+        col.setPadding(dp(UiStyle.GUTTER), dp(16), dp(UiStyle.GUTTER), dp(UiStyle.GUTTER));
+        col.addView(UiStyle.header(this, p, "The app crashed last time",
+                "Copy this report and send it so the problem can be fixed."), matchWrap());
+
+        ScrollView sv = new ScrollView(this);
+        sv.setBackground(UiStyle.outlined(this, p.code, p.outline, UiStyle.CARD_RADIUS));
         TextView tv = new TextView(this);
         tv.setText(report);
         tv.setTextSize(11);
+        tv.setTextColor(p.text);
         tv.setTypeface(android.graphics.Typeface.MONOSPACE);
         tv.setTextIsSelectable(true);
+        tv.setPadding(dp(12), dp(12), dp(12), dp(12));
         sv.addView(tv);
         col.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
         LinearLayout row = new LinearLayout(this);
-        Button copy = new Button(this);
-        copy.setText("Copy report");
-        copy.setAllCaps(false);
+        View copy = UiStyle.button(this, "Copy report", UiStyle.BTN_OUTLINE, R.drawable.ic_copy);
         copy.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -77,18 +94,18 @@ public class MainActivity extends BaseActivity {
                 toast("Copied");
             }
         });
-        Button cont = new Button(this);
-        cont.setText("Continue");
-        cont.setAllCaps(false);
+        View cont = UiStyle.button(this, "Continue", UiStyle.BTN_PRIMARY);
         cont.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 com.mydecompilers.utils.CrashLog.clear(MainActivity.this);
                 recreate();
             }
         });
-        row.addView(copy, weight(1f));
-        row.addView(cont, weight(1f));
-        col.addView(row, matchWrap());
+        row.addView(copy, UiStyle.lp(0, -2, 0, 0, dp(6), 0));
+        ((LinearLayout.LayoutParams) copy.getLayoutParams()).weight = 1f;
+        row.addView(cont, UiStyle.lp(0, -2, dp(6), 0, 0, 0));
+        ((LinearLayout.LayoutParams) cont.getLayoutParams()).weight = 1f;
+        col.addView(row, UiStyle.lp(-1, -2, 0, dp(12), 0, 0));
         setContentView(col);
     }
 
@@ -96,21 +113,16 @@ public class MainActivity extends BaseActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(p.bg);
 
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        root.addView(UiStyle.divider(this, p));
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER);
-        bar.setPadding(dp(10), dp(7), dp(10), dp(7));
-        bar.setBackgroundColor(isDarkTheme() ? 0xff202a38 : 0xffffffff);
-        tabApps = tabButton("▦  Apps", 0);
-        tabHistory = tabButton("◷  History", 1);
-        tabSettings = tabButton("⚙  Settings", 2);
-        bar.addView(tabApps, weight(1f));
-        bar.addView(tabHistory, weight(1f));
-        bar.addView(tabSettings, weight(1f));
+        bar.setBackgroundColor(p.surface);
+        for (int i = 0; i < 3; i++) bar.addView(navItem(i), weight(1f));
         root.addView(bar, matchWrap());
 
         setContentView(root);
@@ -124,27 +136,45 @@ public class MainActivity extends BaseActivity {
         handleIncoming(getIntent());
     }
 
-    private Button tabButton(String label, final int index) {
-        Button b = new Button(this);
-        b.setText(label);
-        b.setAllCaps(false);
-        b.setTextSize(13);
-        b.setMinHeight(dp(48));
-        b.setOnClickListener(new View.OnClickListener() {
+    /** One bottom-navigation item: icon inside a pill that lights up when selected, plus a label. */
+    private View navItem(final int index) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER_HORIZONTAL);
+        item.setPadding(0, dp(8), 0, dp(8));
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setContentDescription(navLabels[index]);
+        item.setBackground(UiStyle.pressable(this, p.ripple, 0x00000000, 0, 0));
+        item.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 selectTab(index);
             }
         });
-        return b;
+
+        FrameLayout pill = new FrameLayout(this);
+        ImageView img = new ImageView(this);
+        pill.addView(img, new FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER));
+        item.addView(pill, new LinearLayout.LayoutParams(dp(60), dp(32)));
+
+        TextView label = UiStyle.text(this, navLabels[index], 12, p.textSecondary, false);
+        item.addView(label, UiStyle.lp(-2, -2, 0, dp(2), 0, 0));
+
+        navPills[index] = pill;
+        navImages[index] = img;
+        navTexts[index] = label;
+        return item;
     }
 
     private void selectTab(int index) {
         currentTab = index;
-        Button[] tabs = new Button[] { tabApps, tabHistory, tabSettings };
-        for (int i = 0; i < tabs.length; i++) {
-            boolean selected = i == index;
-            tabs[i].setTextColor(selected ? 0xffffffff : (isDarkTheme() ? 0xffb5c1d1 : UiStyle.MUTED));
-            tabs[i].setBackground(UiStyle.shape(this, selected ? UiStyle.BLUE : (isDarkTheme() ? 0xff202a38 : 0xffffffff), 12));
+        for (int i = 0; i < 3; i++) {
+            boolean on = i == index;
+            int color = on ? p.accent : p.textSecondary;
+            navPills[i].setBackground(on ? UiStyle.shape(this, p.accentSoft, 16) : null);
+            navImages[i].setImageDrawable(UiStyle.tinted(this, navIcons[i], color));
+            navTexts[i].setTextColor(on ? p.text : p.textSecondary);
+            navTexts[i].setTypeface(android.graphics.Typeface.DEFAULT, on ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
         }
         content.removeAllViews();
         View v;
@@ -159,9 +189,6 @@ public class MainActivity extends BaseActivity {
             settings.onShow();
         }
         content.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        tabApps.setEnabled(index != 0);
-        tabHistory.setEnabled(index != 1);
-        tabSettings.setEnabled(index != 2);
     }
 
     private void requestStoragePermission() {
