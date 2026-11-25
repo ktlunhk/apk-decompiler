@@ -16,12 +16,12 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.TypedValue;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -31,6 +31,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import com.mydecompilers.Constants;
+import com.mydecompilers.R;
 import com.mydecompilers.utils.FileUtils;
 import com.mydecompilers.utils.ShareUtils;
 
@@ -76,38 +77,52 @@ public class CodeViewerActivity extends BaseActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(p.bg);
 
+        // find bar (toggled from the action bar)
         searchBar = new LinearLayout(this);
-        searchBar.setOrientation(LinearLayout.HORIZONTAL);
-        searchInput = new EditText(this);
-        searchInput.setHint("Find in file");
-        searchInput.setSingleLine(true);
-        searchBar.addView(searchInput, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button prev = new Button(this);
-        prev.setText("\u25B2");
+        searchBar.setOrientation(LinearLayout.VERTICAL);
+        searchBar.setBackgroundColor(p.surface);
+        LinearLayout searchRow = new LinearLayout(this);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        searchRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        searchRow.setPadding(dp(12), dp(8), dp(12), dp(8));
+        LinearLayout searchBox = UiStyle.inputBox(this, p, R.drawable.ic_search, "Find in file");
+        searchInput = UiStyle.inputOf(searchBox);
+        searchInput.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                find(true);
+                return true;
+            }
+        });
+        searchRow.addView(searchBox, new LinearLayout.LayoutParams(0, dp(UiStyle.CONTROL_HEIGHT), 1f));
+        View prev = UiStyle.iconButton(this, p, R.drawable.ic_arrow_up, "Previous match");
         prev.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 find(false);
             }
         });
-        Button next = new Button(this);
-        next.setText("\u25BC");
+        View next = UiStyle.iconButton(this, p, R.drawable.ic_arrow_down, "Next match");
         next.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 find(true);
             }
         });
-        searchBar.addView(prev);
-        searchBar.addView(next);
+        searchRow.addView(prev, UiStyle.lp(dp(UiStyle.CONTROL_HEIGHT), dp(UiStyle.CONTROL_HEIGHT), dp(8), 0, 0, 0));
+        searchRow.addView(next, UiStyle.lp(dp(UiStyle.CONTROL_HEIGHT), dp(UiStyle.CONTROL_HEIGHT), dp(8), 0, 0, 0));
+        searchBar.addView(searchRow, matchWrap());
+        searchBar.addView(UiStyle.divider(this, p));
         searchBar.setVisibility(View.GONE);
         root.addView(searchBar, matchWrap());
 
+        contentHolder = new FrameLayout(this);
+        contentHolder.setBackgroundColor(p.code);
+        root.addView(contentHolder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
         progress = new ProgressBar(this);
         progress.setIndeterminate(true);
-        root.addView(progress, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        contentHolder = new FrameLayout(this);
-        root.addView(contentHolder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        contentHolder.addView(progress, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER));
         setContentView(root);
 
         load();
@@ -187,6 +202,9 @@ public class CodeViewerActivity extends BaseActivity {
         editor.setTypeface(Typeface.MONOSPACE);
         editor.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
         editor.setBackgroundDrawable(null);
+        editor.setTextColor(p.text);
+        editor.setHighlightColor((p.accent & 0x00ffffff) | 0x55000000);
+        editor.setPadding(dp(8), dp(8), dp(14), dp(8));
         editor.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
         editor.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -202,6 +220,7 @@ public class CodeViewerActivity extends BaseActivity {
             public void afterTextChanged(Editable s) {
                 if (loaded) {
                     modified = true;
+                    updateTitle();
                     updateLineNumbers();
                 }
             }
@@ -213,9 +232,10 @@ public class CodeViewerActivity extends BaseActivity {
         lineNumbers.setTypeface(Typeface.MONOSPACE);
         lineNumbers.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize);
         lineNumbers.setGravity(android.view.Gravity.END);
-        lineNumbers.setPadding(dp(6), editor.getPaddingTop(), dp(6), 0);
-        lineNumbers.setAlpha(0.5f);
-        if (!wrap) row.addView(lineNumbers, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        lineNumbers.setTextColor(p.textSecondary);
+        lineNumbers.setBackgroundColor(p.dark ? 0xff161d27 : 0xffe9edf4);
+        lineNumbers.setPadding(dp(10), editor.getPaddingTop(), dp(10), editor.getPaddingBottom());
+        if (!wrap) row.addView(lineNumbers, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
         row.addView(editor, new LinearLayout.LayoutParams(wrap ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, wrap ? 1f : 0f));
 
@@ -231,6 +251,12 @@ public class CodeViewerActivity extends BaseActivity {
         contentHolder.addView(vScroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         updateLineNumbers();
         modified = false;
+        updateTitle();
+    }
+
+    /** A leading dot in the title marks unsaved edits. */
+    private void updateTitle() {
+        setTitle((modified ? "\u25CF " : "") + file.getName());
     }
 
     private void updateLineNumbers() {
@@ -278,18 +304,26 @@ public class CodeViewerActivity extends BaseActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, 1, 0, "Search").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        menu.add(0, 1, 0, "Search")
+                .setIcon(UiStyle.tinted(this, R.drawable.ic_search, 0xffffffff))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, 2, 1, "Toggle word wrap");
         menu.add(0, 3, 2, "Text size +");
         menu.add(0, 4, 3, "Text size -");
         menu.add(0, 5, 4, "Copy all");
-        menu.add(0, 6, 5, "Save").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        menu.add(0, 6, 5, "Save")
+                .setIcon(UiStyle.tinted(this, R.drawable.ic_save, 0xffffffff))
+                .setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         menu.add(0, 7, 6, "Share");
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            onBackPressed();
+            return true;
+        }
         if (!loaded) return true;
         switch (item.getItemId()) {
             case 1:
@@ -302,6 +336,7 @@ public class CodeViewerActivity extends BaseActivity {
                 boolean wasModified = modified;
                 buildContent();
                 modified = wasModified;
+                updateTitle();
                 return true;
             case 3:
             case 4:
@@ -332,6 +367,7 @@ public class CodeViewerActivity extends BaseActivity {
         try {
             FileUtils.writeText(file, editor.getText().toString());
             modified = false;
+            updateTitle();
             toast("Saved");
         } catch (Exception e) {
             toast("Save failed: " + e.getMessage());
