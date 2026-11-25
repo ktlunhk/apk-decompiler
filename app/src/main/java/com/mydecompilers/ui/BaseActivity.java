@@ -6,8 +6,8 @@
 package com.mydecompilers.ui;
 
 import android.app.Activity;
-import android.content.res.Configuration;
 import android.os.Bundle;
+import android.view.MenuItem;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,35 +15,51 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.mydecompilers.R;
-import com.mydecompilers.utils.UserPreferences;
 
 /** Applies the chosen light/dark theme and offers a few view-building helpers. */
 public abstract class BaseActivity extends Activity {
+
+    /** Colour tokens for the active mode; available from onCreate() on. */
+    protected UiStyle.Palette p;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         setTheme(isDarkTheme() ? R.style.AppThemeDark : R.style.AppThemeLight);
         super.onCreate(savedInstanceState);
+        p = UiStyle.palette(this);
+        if (showUp() && getActionBar() != null) getActionBar().setDisplayHomeAsUpEnabled(true);
+    }
+
+    /** Detail screens show a back arrow in the action bar; the main screen does not. */
+    protected boolean showUp() {
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            onBackPressed();
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     protected boolean isDarkTheme() {
-        String mode = new UserPreferences(this).getThemeMode();
-        if (UserPreferences.THEME_DARK.equals(mode)) return true;
-        if (UserPreferences.THEME_LIGHT.equals(mode)) return false;
-        int night = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        return night == Configuration.UI_MODE_NIGHT_YES;
+        return UiStyle.isDark(this);
     }
 
     protected int dp(int v) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics());
     }
 
+    /** Primary-coloured text. */
     protected TextView text(String s, int sp, boolean bold) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        if (bold) t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
-        return t;
+        return UiStyle.text(this, s, sp, p.text, bold);
+    }
+
+    /** Muted secondary text. */
+    protected TextView caption(String s, int sp) {
+        return UiStyle.text(this, s, sp, p.textSecondary, false);
     }
 
     protected LinearLayout column() {
