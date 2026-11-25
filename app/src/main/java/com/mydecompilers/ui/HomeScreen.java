@@ -19,17 +19,15 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.mydecompilers.R;
 
 import com.mydecompilers.data.PackageInfo;
 import com.mydecompilers.utils.ApkUtils;
@@ -46,12 +44,14 @@ import java.util.Locale;
 public class HomeScreen {
 
     private final MainActivity activity;
+    private final UiStyle.Palette p;
     private final LinearLayout root;
     private final EditText search;
-    private final Spinner filter;
+    private final Segmented filter;
     private final ListView list;
     private final ProgressBar loading;
-    private final TextView empty;
+    private final View empty;
+    private final TextView count;
     private final AppAdapter adapter;
 
     private static List<PackageInfo> cachedUser = new ArrayList<PackageInfo>();
@@ -61,93 +61,71 @@ public class HomeScreen {
 
     public HomeScreen(MainActivity a) {
         this.activity = a;
-        int pad = dp(16);
+        p = UiStyle.palette(a);
+        int pad = dp(UiStyle.GUTTER);
 
         root = new LinearLayout(a);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(pad, dp(12), pad, 0);
-        root.setBackgroundColor(activity.isDarkTheme() ? 0xff121820 : UiStyle.LIGHT);
-        TextView heading = new TextView(a);
-        heading.setText("Explore applications");
-        UiStyle.label(heading, 23, activity.isDarkTheme() ? 0xfff2f5fc : UiStyle.INK, true);
-        root.addView(heading);
-        TextView subtitle = new TextView(a);
-        subtitle.setText("Browse installed apps or import an APK file");
-        UiStyle.label(subtitle, 13, activity.isDarkTheme() ? 0xffaab6c7 : UiStyle.MUTED, false);
-        LinearLayout.LayoutParams subtitleParams = new LinearLayout.LayoutParams(-1, -2);
-        subtitleParams.bottomMargin = dp(16);
-        root.addView(subtitle, subtitleParams);
+        root.setPadding(pad, dp(16), pad, 0);
+        root.setBackgroundColor(p.bg);
+        root.addView(UiStyle.header(a, p, "Explore applications", "Browse installed apps or import an APK file"));
 
+        // search + import
         LinearLayout top = new LinearLayout(a);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        search = new EditText(a);
-        search.setHint("Search name or package…");
-        search.setTextSize(14);
-        search.setSingleLine(true);
-        search.setPadding(dp(14), dp(10), dp(10), dp(10));
-        search.setBackground(UiStyle.outlined(a, activity.isDarkTheme() ? 0xff263140 : 0xffffffff, activity.isDarkTheme() ? 0xff455367 : 0xffdce3ed, 12));
-        search.setSingleLine(true);
-        top.addView(search, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button open = new Button(a);
-        open.setText("+ Import");
-        open.setTextColor(0xffffffff);
-        open.setBackground(UiStyle.shape(a, UiStyle.BLUE, 12));
-        open.setAllCaps(false);
+        LinearLayout searchBox = UiStyle.inputBox(a, p, R.drawable.ic_search, "Search name or package");
+        search = UiStyle.inputOf(searchBox);
+        top.addView(searchBox, new LinearLayout.LayoutParams(0, dp(UiStyle.CONTROL_HEIGHT), 1f));
+        View open = UiStyle.button(a, "Import", UiStyle.BTN_PRIMARY, R.drawable.ic_add);
         open.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 activity.pickFile();
             }
         });
-        LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(48));
-        openParams.leftMargin = dp(10);
-        top.addView(open, openParams);
-        LinearLayout.LayoutParams topParams = new LinearLayout.LayoutParams(-1, -2);
-        topParams.bottomMargin = dp(12);
-        root.addView(top, topParams);
+        top.addView(open, UiStyle.lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(UiStyle.CONTROL_HEIGHT), dp(10), 0, 0, 0));
+        root.addView(top, UiStyle.lp(-1, -2, 0, 0, 0, dp(12)));
 
+        // user / system switch + refresh
         LinearLayout row2 = new LinearLayout(a);
         row2.setOrientation(LinearLayout.HORIZONTAL);
         row2.setGravity(Gravity.CENTER_VERTICAL);
-        filter = new Spinner(a);
-        filter.setAdapter(new ArrayAdapter<String>(a, android.R.layout.simple_spinner_dropdown_item,
-                new String[] { "User apps", "System apps" }));
+        filter = new Segmented(a, new String[] { "User apps", "System apps" }, 0);
         row2.addView(filter, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button refresh = new Button(a);
-        refresh.setText("↻ Refresh");
-        refresh.setTextColor(UiStyle.BLUE);
-        refresh.setBackground(UiStyle.outlined(a, activity.isDarkTheme() ? 0xff263140 : 0xffffffff, activity.isDarkTheme() ? 0xff455367 : 0xffdce3ed, 10));
-        refresh.setAllCaps(false);
+        View refresh = UiStyle.iconButton(a, p, R.drawable.ic_refresh, "Refresh");
         refresh.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 reload();
             }
         });
-        row2.addView(refresh, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams filterParams = new LinearLayout.LayoutParams(-1, -2);
-        filterParams.bottomMargin = dp(12);
-        root.addView(row2, filterParams);
+        row2.addView(refresh, UiStyle.lp(dp(UiStyle.CONTROL_HEIGHT), dp(UiStyle.CONTROL_HEIGHT), dp(10), 0, 0, 0));
+        root.addView(row2, UiStyle.lp(-1, -2, 0, 0, 0, dp(12)));
+
+        count = UiStyle.text(a, "", 12, p.textSecondary, false);
+        count.setPadding(dp(4), 0, 0, dp(8));
+        root.addView(count, matchWrapParams());
 
         loading = new ProgressBar(a);
         loading.setIndeterminate(true);
-        root.addView(loading, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(loading, UiStyle.lp(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 0, dp(16), 0, 0));
+        ((LinearLayout.LayoutParams) loading.getLayoutParams()).gravity = Gravity.CENTER_HORIZONTAL;
         loading.setVisibility(View.GONE);
 
-        empty = new TextView(a);
-        empty.setText("No applications found\nTry another search or refresh the list.");
-        UiStyle.label(empty, 14, activity.isDarkTheme() ? 0xffaab6c7 : UiStyle.MUTED, false);
-        empty.setGravity(Gravity.CENTER);
-        empty.setPadding(0, dp(24), 0, 0);
+        empty = UiStyle.emptyState(a, p, R.drawable.ic_search, "No applications found",
+                "Try another search or refresh the list.");
         empty.setVisibility(View.GONE);
-        root.addView(empty, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(empty, matchWrapParams());
 
         list = new ListView(a);
         adapter = new AppAdapter();
         list.setAdapter(adapter);
         list.setDivider(null);
-        list.setDividerHeight(dp(7));
+        list.setDividerHeight(dp(8));
         list.setSelector(android.R.color.transparent);
         list.setCacheColorHint(android.graphics.Color.TRANSPARENT);
+        list.setClipToPadding(false);
+        list.setPadding(0, 0, 0, dp(16));
+        list.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(list, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -169,13 +147,15 @@ public class HomeScreen {
                 applyFilter();
             }
         });
-        filter.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+        filter.setListener(new Segmented.Listener() {
+            public void onSelected(int index) {
                 applyFilter();
             }
-
-            public void onNothingSelected(AdapterView<?> parent) { }
         });
+    }
+
+    private static LinearLayout.LayoutParams matchWrapParams() {
+        return new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private int dp(int v) {
@@ -233,7 +213,7 @@ public class HomeScreen {
     }
 
     private void applyFilter() {
-        List<PackageInfo> source = filter.getSelectedItemPosition() == 0 ? cachedUser : cachedSystem;
+        List<PackageInfo> source = filter.getSelectedIndex() == 0 ? cachedUser : cachedSystem;
         String q = search.getText().toString().trim().toLowerCase(Locale.US);
         List<PackageInfo> out = new ArrayList<PackageInfo>();
         for (PackageInfo p : source) {
@@ -243,6 +223,8 @@ public class HomeScreen {
         }
         adapter.setItems(out);
         empty.setVisibility(out.isEmpty() && !loadingNow ? View.VISIBLE : View.GONE);
+        count.setText(out.size() == 1 ? "1 app" : out.size() + " apps");
+        count.setVisibility(out.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     // ------------------------------------------------------------ actions
@@ -328,49 +310,17 @@ public class HomeScreen {
         public long getItemId(int position) { return position; }
 
         public View getView(int position, View convertView, ViewGroup parent) {
-            Holder h;
+            ListRow row;
             if (convertView == null) {
-                LinearLayout row = new LinearLayout(activity);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER_VERTICAL);
-                row.setPadding(dp(12), dp(12), dp(12), dp(12));
-                row.setBackground(UiStyle.outlined(activity, activity.isDarkTheme() ? 0xff202a38 : 0xffffffff, activity.isDarkTheme() ? 0xff344154 : 0xffe8edf5, 14));
-                h = new Holder();
-                h.icon = new ImageView(activity);
-                row.addView(h.icon, new LinearLayout.LayoutParams(dp(44), dp(44)));
-                LinearLayout col = new LinearLayout(activity);
-                col.setOrientation(LinearLayout.VERTICAL);
-                col.setPadding(dp(12), 0, 0, 0);
-                h.label = new TextView(activity);
-                UiStyle.label(h.label, 15, activity.isDarkTheme() ? 0xfff2f5fc : UiStyle.INK, true);
-                h.label.setTypeface(h.label.getTypeface(), android.graphics.Typeface.BOLD);
-                h.label.setSingleLine(true);
-                h.pkg = new TextView(activity);
-                UiStyle.label(h.pkg, 12, activity.isDarkTheme() ? 0xffb4c0d0 : UiStyle.MUTED, false);
-                h.pkg.setSingleLine(true);
-                h.meta = new TextView(activity);
-                UiStyle.label(h.meta, 11, UiStyle.BLUE, false);
-                h.meta.setSingleLine(true);
-                col.addView(h.label);
-                col.addView(h.pkg);
-                col.addView(h.meta);
-                row.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-                row.setTag(h);
-                convertView = row;
+                row = new ListRow(activity);
+                row.useAppIcon();
             } else {
-                h = (Holder) convertView.getTag();
+                row = (ListRow) convertView;
             }
             PackageInfo info = items.get(position);
-            h.label.setText(info.label);
-            h.pkg.setText(info.name);
-            h.meta.setText(info.version + "  \u2022  " + info.typeLabel());
-            IconLoader.load(activity, info, h.icon);
-            return convertView;
+            row.bind(info.label, info.name, info.typeLabel(), info.version);
+            IconLoader.load(activity, info, row.icon);
+            return row;
         }
-    }
-
-    private static class Holder {
-        ImageView icon;
-        TextView label, pkg, meta;
     }
 }
